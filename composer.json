@@ -15,7 +15,7 @@
     "require": {
         "spomky-labs/otphp": "^11.2",
         "phlak/strgen": "^3.0",
-        "google/apiclient": "^2.16",
+        "google/apiclient": "^2.18",
         "google/cloud-vision": "^1.9"
     }
 }
