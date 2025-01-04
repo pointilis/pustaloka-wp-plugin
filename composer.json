@@ -1,0 +1,21 @@
+{
+    "name": "pointilis/pustaloka",
+    "description": "A simple plugin for book lovers to share their mind.",
+    "type": "library",
+    "autoload": {
+        "psr-4": {
+            "Pointilis\\Pustaloka\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Rahman"
+        }
+    ],
+    "require": {
+        "spomky-labs/otphp": "^11.2",
+        "phlak/strgen": "^3.0",
+        "google/apiclient": "^2.16",
+        "google/cloud-vision": "^1.9"
+    }
+}
