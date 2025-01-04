@@ -66,6 +66,22 @@ class BP_Filters {
             $new_data = array( 'ID' => $user_id, 'display_name' => $meta['display_name'] );
             wp_update_user( $new_data );
         }
+
+        // save access token
+        if ( isset( $meta['google_access_token'] ) ) {
+            update_user_meta( $user_id, 'google_access_token', $meta['google_access_token'] );
+        }
+
+        // save id token
+        if ( isset( $meta['google_id_token'] ) ) {
+            update_user_meta( $user_id, 'google_id_token', $meta['google_id_token'] );
+        }
+
+        // save profile id
+        if ( isset( $meta['google_profile_id'] ) ) {
+            update_user_meta( $user_id, 'google_profile_id', $meta['google_profile_id'] );
+        }
+        
     }
 
     /**
@@ -73,9 +89,17 @@ class BP_Filters {
      */
     public function bp_rest_signup_create_item_meta_extend( $meta, $request ) {
         $display_name = $request->get_param( 'display_name' );
+        $google_access_token = $request->get_param( 'google_access_token' );
+        $google_id_token = $request->get_param( 'google_id_token' );
+        $google_profile_id = $request->get_param( 'google_profile_id' );
 
         // add display name
         $meta['display_name'] = $display_name;
+
+        // login with google
+        $meta['google_access_token'] = $google_access_token;
+        $meta['google_id_token'] = $google_id_token;
+        $meta['google_profile_id'] = $google_profile_id;
 
         return $meta;
     }

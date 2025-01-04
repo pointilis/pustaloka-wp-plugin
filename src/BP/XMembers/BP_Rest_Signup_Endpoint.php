@@ -29,7 +29,7 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
 		if ( ! username_exists( $new_username ) ) {
 			return $new_username;
 		} else {
-			return call_user_func( __FUNCTION__, $username );
+			return $this->generate_unique_username( $username );
 		}
 	}
     
@@ -37,6 +37,8 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
      * Register new route
      */
     public function register_routes() {
+		parent::register_routes();
+
 		// Register the activate route.
 		register_rest_route(
 			$this->namespace,
@@ -79,8 +81,6 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
 				'schema' => array( $this, 'get_item_schema' ),
 			)
 		);
-
-        parent::register_routes();
     }
 
     /**
@@ -208,9 +208,22 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
         $request->set_param( 'context', 'edit' );
 
 		// Generate user_login from email
-		$user_email = $request->get_param( 'user_email' );
-		$username = substr( $user_email, 0, strrpos( $user_email, '@' ) );
-		$username = $this->generate_unique_username( $username );
+		$user_email 	= $request->get_param( 'user_email' );
+		$id_token 		= $request->get_param( 'google_id_token' );
+		$profile_id 	= $request->get_param( 'google_profile_id' );
+		$username 		= substr( $user_email, 0, strrpos( $user_email, '@' ) );
+		$username 		= $this->generate_unique_username( $username );
+
+		// Check user with google auth token and google id token
+		if ( $id_token && $profile_id && email_exists( $user_email ) && $this->checkGoogleIdToken( $id_token )) {
+			$user 				= get_user_by( 'email', $user_email );
+			$google_profile_id	= get_user_meta( $user->ID, 'google_profile_id', true );
+
+			if ( $google_profile_id === $profile_id ) {
+				$retval = array( 'status' => 'registered' );
+				return rest_ensure_response( array( $retval ) );
+			}
+		}
 
 		// Set username as user_login
 		$request->set_param( 'user_login', $username );
@@ -342,6 +355,28 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
 			'meta'           => $meta,
 		);
 
+		// When register with google user will automatically activated.
+		$direct_activation 	= false;
+		$is_active			= false;
+
+		// Validate google auth token.
+		if ( isset( $meta['google_access_token'] ) && isset( $meta['google_id_token'] ) ) {
+			if ( $this->checkGoogleIdToken( $meta['google_id_token'] ) ) {
+				$direct_activation = true;
+				add_filter( 'bp_core_signup_send_activation_key', '__return_false' );
+			} else {
+				$direct_activation = false;
+
+				return new \WP_Error(
+					'bp_rest_signup_invalid_id_token',
+					__( 'Cannot create new signup.', 'buddypress' ),
+					array(
+						'status' => 500,
+					)
+				);
+			}
+		}
+
 		// Add signup.
 		$id = BP_Signup::add( $signup_args );
 
@@ -382,6 +417,22 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
 			}
 		}
 
+		// All OK, now activate the user.
+		if ( $direct_activation ) {
+			$activated = bp_core_activate_signup( $signup->activation_key );
+			if ( ! $activated ) {
+				return new \WP_Error(
+					'bp_rest_signup_activate_fail',
+					__( 'Fail to activate the signup.', 'buddypress' ),
+					array(
+						'status' => 500,
+					)
+				);
+			} else {
+				$is_active = true;
+			}
+		}
+
 		$retval = array(
 			$this->prepare_response_for_collection(
 				$this->prepare_item_for_response( $signup, $request )
@@ -389,6 +440,9 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
 		);
 
 		$response = rest_ensure_response( $retval );
+
+		// Inform activation status.
+		$response->data[0]['is_active'] = $is_active;
 
 		/**
 		 * Fires after a signup item is created via the REST API.
@@ -524,6 +578,19 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
 		);
 
 		return $schema;
+	}
+
+	/**
+	 * Check google ID token
+	 */
+	public function checkGoogleIdToken( $id_token ) {
+		$guzzleClient 	= new \GuzzleHttp\Client(array( 'curl' => array( CURLOPT_SSL_VERIFYPEER => false, ), ));
+		$client_id 		= '1087260463503-v7vb772sh1oef1ac295rbg8ju5b8fjt8.apps.googleusercontent.com';
+		$client 		= new \Google_Client( array( 'client_id' => $client_id ) );
+		$client->setHttpClient( $guzzleClient );
+		$payload 		= $client->verifyIdToken( $id_token );
+
+		return $payload;
 	}
 
 }
