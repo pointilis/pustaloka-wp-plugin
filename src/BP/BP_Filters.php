@@ -7,6 +7,7 @@ use Pointilis\Pustaloka\Core\Helpers;
 class BP_Filters {
 
     public function __construct() {
+        add_filter( 'bp_email_use_wp_mail', '__return_true' );
         add_filter( 'bp_after_bp_core_signups_add_args_parse_args', array( $this, 'bp_core_signups_add_args_extend' ), 10, 1 );
         add_filter( 'bp_rest_signup_create_item_meta', array( $this, 'bp_rest_signup_create_item_meta_extend' ), 10, 2 );
         add_filter( 'bp_email_get_unsubscribe_type_schema', array( $this, 'bp_email_get_unsubscribe_type_schema_extend' ), 10, 1 );
@@ -19,7 +20,23 @@ class BP_Filters {
         add_action( 'bp_core_install_emails', array( $this, 'bp_core_install_emails_extend' ) );
         add_filter( 'bp_after_bp_get_user_friendships', array( $this, 'bp_after_bp_get_user_friendships' ), 10, 1 );
         add_filter( 'bp_rest_friends_get_items_query_args', array( $this, 'bp_rest_friends_get_items_query_args' ), 10, 2 );
+        add_action( 'bp_rest_api_init', array( $this, 'wp_rest_allow_all_cors' ), 15 );
     }
+    
+    function wp_rest_allow_all_cors() {
+        // Remove the default filter.
+        remove_filter( 'rest_pre_serve_request', 'rest_send_cors_headers' );
+    
+        // Add a Custom filter.
+        add_filter( 'rest_pre_serve_request', function( $value ) {
+            header( 'Access-Control-Allow-Origin: *' );
+            header( 'Access-Control-Allow-Methods: POST, GET, OPTIONS, PUT, DELETE' );
+            header( 'Access-Control-Allow-Credentials: true' );
+            header( 'Access-Control-Allow-Headers: *' );
+            return $value;
+        });
+    }
+
 
     /**
      * Modify some field for registration
