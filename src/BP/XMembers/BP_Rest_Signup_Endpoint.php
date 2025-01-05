@@ -360,10 +360,9 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
 		$is_active			= false;
 
 		// Validate google auth token.
-		if ( isset( $meta['google_access_token'] ) && isset( $meta['google_id_token'] ) ) {
-			if ( $this->checkGoogleIdToken( $meta['google_id_token'] ) ) {
+		if ( $id_token ) {
+			if ( $this->checkGoogleIdToken( $id_token ) ) {
 				$direct_activation = true;
-				add_filter( 'bp_core_signup_send_activation_key', '__return_false' );
 			} else {
 				$direct_activation = false;
 
@@ -585,7 +584,7 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
 	 */
 	public function checkGoogleIdToken( $id_token ) {
 		$guzzleClient 	= new \GuzzleHttp\Client(array( 'curl' => array( CURLOPT_SSL_VERIFYPEER => false, ), ));
-		$client_id 		= '1087260463503-v7vb772sh1oef1ac295rbg8ju5b8fjt8.apps.googleusercontent.com';
+		$client_id 		= '1087260463503-80jh2sbb558fetnup7a09u91oevm4d8s.apps.googleusercontent.com';
 		$client 		= new \Google_Client( array( 'client_id' => $client_id ) );
 		$client->setHttpClient( $guzzleClient );
 		$payload 		= $client->verifyIdToken( $id_token );
