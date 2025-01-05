@@ -110,7 +110,17 @@ class BP_REST_Members_Endpoint extends \BP_REST_Members_Endpoint {
             ),
         );
 
-        bp_send_email( 'bp-members-forgot-password', $user->data->ID, $args );
+        $send_email = bp_send_email( 'bp-members-forgot-password', $user_email, $args );
+
+        if ( is_wp_error( $send_email ) ) {
+            return new \WP_Error(
+				'bp_rest_send_email_failed',
+				$send_email->get_error_messages(),
+				array(
+					'status' => $send_email->get_error_code(),
+				)
+			);
+        }
 
         $retval = array(
             'message' 		=> __( 'Reset password security key has been sent!', 'pustaloka' ),
