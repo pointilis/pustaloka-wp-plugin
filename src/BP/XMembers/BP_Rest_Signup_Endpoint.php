@@ -320,6 +320,17 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
 			}
 		}
 
+		// no retval return error
+		if ( empty( $retval ) ) {
+			return new \WP_Error(
+				'bp_rest_oauth_failed',
+				__( 'Data not complete yet!', 'pustaloka' ),
+				array(
+					'status' 	=> 500,
+				)
+			);
+		}
+
 		return rest_ensure_response( $retval );
 	}
 
