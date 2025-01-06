@@ -4,6 +4,8 @@ namespace Pointilis\Pustaloka\BP\XMembers;
 
 use Pointilis\Pustaloka\Core\Helpers;
 use Pointilis\Pustaloka\BP\XMembers\BP_Signup;
+use Tmeister\Firebase\JWT\JWT;
+use Tmeister\Firebase\JWT\Key;
 
 class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
 
@@ -55,6 +57,40 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
                             'context'           => array( 'edit', 'view' ),
                             'required'          => true,
                         )
+					),
+				),
+				'schema' => array( $this, 'get_item_schema' ),
+			)
+		);
+
+		// Register check oauth account like google, etc.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/oauth',
+			array(
+				array(
+					'methods'             => \WP_REST_Server::EDITABLE,
+					'callback'            => array( $this, 'oauth_create' ),
+					'permission_callback' => array( $this, 'oauth_permissions_check' ),
+					'args'                => array(
+						'provider'     => array(
+                            'description'       => __( 'Provider used for oauth like google, facebook, etc', 'pustaloka' ),
+                            'type'              => 'string',
+                            'context'           => array( 'edit', 'view' ),
+                            'required'          => true,
+                        ),
+						'token_id'     => array(
+                            'description'       => __( 'Security token', 'pustaloka' ),
+                            'type'              => 'string',
+                            'context'           => array( 'edit', 'view' ),
+                            'required'          => true,
+                        ),
+						'profile_id'     => array(
+                            'description'       => __( 'Profile id', 'pustaloka' ),
+                            'type'              => 'string',
+                            'context'           => array( 'edit', 'view' ),
+                            'required'          => true,
+                        ),
 					),
 				),
 				'schema' => array( $this, 'get_item_schema' ),
@@ -201,6 +237,100 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
         return $value;
     }
 
+	/**
+	 * Oauth check based on provider
+	 */
+	public function oauth_create( $request ) {
+		$profile_id 	= $request->get_param( 'profile_id' );
+		$token 			= $request->get_param( 'token_id' );
+		$provider 		= $request->get_param( 'provider' );
+		$retval			= array();
+
+		// for google user
+		if ( $provider === 'google' ) {
+			// check token is valid
+			if ( $this->check_google_idtoken( $token ) ) {
+				$users = get_users( array(
+					'meta_key'		=> 'google_profile_id',
+					'meta_value'	=> $profile_id,
+					'number'		=> 1,
+					'count_total'	=> false,
+				) );
+
+				// users not found
+				if ( empty( $users ) ) {
+					return new \WP_Error(
+						'bp_rest_oauth_not_found',
+						__( 'User not found', 'pustaloka' ),
+						array(
+							'status' => 404,
+						)
+					);
+				}
+
+				$user = reset( $users );
+				$user = get_user_by( 'email', $user->user_email );
+
+				// compare profile id with current
+				$saved_profile_id = get_user_meta( $user->ID, 'google_profile_id', true );
+
+				if ( ( $saved_profile_id !== $profile_id ) || ( $user->user_email !== $profile_id ) ) {
+					return new \WP_Error(
+						'bp_rest_oauth_not_found',
+						__( 'User not found', 'pustaloka' ),
+						array(
+							'status' => 404,
+						)
+					);
+				}
+
+				// generate jwt token
+				$secret_key = defined( 'JWT_AUTH_SECRET_KEY' ) ? JWT_AUTH_SECRET_KEY : false;
+				$issuedAt  	= time();
+				$notBefore 	= apply_filters( 'jwt_auth_not_before', $issuedAt, $issuedAt );
+				$expire    	= apply_filters( 'jwt_auth_expire', $issuedAt + ( DAY_IN_SECONDS * 7 ), $issuedAt );
+				$token 		= array(
+	                'iss'  => get_bloginfo( 'url' ),
+                    'iat'  => $issuedAt,
+	                'nbf'  => $notBefore,
+                    'exp'  => $expire,
+                    'data' => array(
+	                    'user' => array(
+	                    	'id' => $user->ID,
+	                    ),
+	                ),
+				);
+				$algorithm 	= apply_filters( 'jwt_auth_algorithm', 'HS256' );
+				$token		= JWT::encode(
+					apply_filters( 'jwt_auth_token_before_sign', $token, $user ),
+					$secret_key,
+					$algorithm
+				);
+
+				/** The token is signed, now create the object with no sensible user data to the client*/
+	            $data = array(
+	                'token'             => $token,
+	                'user_email'        => $user->data->user_email,
+	                'user_nicename'     => $user->data->user_nicename,
+                	'user_display_name' => $user->data->display_name,
+				);
+	
+	            /** Let the user modify the data before send it back */
+	            $retval = apply_filters( 'jwt_auth_token_before_dispatch', $data, $user );
+			}
+		}
+
+		return rest_ensure_response( $retval );
+	}
+
+	public function oauth_permissions_check( $request ) {
+		return true;
+	}
+
+	/**
+	 * Oauth
+	 */
+
     /**
      * Override create item
      */
@@ -213,17 +343,6 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
 		$profile_id 	= $request->get_param( 'google_profile_id' );
 		$username 		= substr( $user_email, 0, strrpos( $user_email, '@' ) );
 		$username 		= $this->generate_unique_username( $username );
-
-		// Check user with google auth token and google id token
-		if ( $id_token && $profile_id && email_exists( $user_email ) && $this->checkGoogleIdToken( $id_token )) {
-			$user 				= get_user_by( 'email', $user_email );
-			$google_profile_id	= get_user_meta( $user->ID, 'google_profile_id', true );
-
-			if ( $google_profile_id === $profile_id ) {
-				$retval = array( 'status' => 'registered' );
-				return rest_ensure_response( array( $retval ) );
-			}
-		}
 
 		// Set username as user_login
 		$request->set_param( 'user_login', $username );
@@ -361,7 +480,7 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
 
 		// Validate google auth token.
 		if ( $id_token ) {
-			if ( $this->checkGoogleIdToken( $id_token ) ) {
+			if ( $this->check_google_idtoken( $id_token ) ) {
 				$direct_activation = true;
 			} else {
 				$direct_activation = false;
@@ -582,7 +701,7 @@ class BP_REST_Signup_Endpoint extends \BP_REST_Signup_Endpoint {
 	/**
 	 * Check google ID token
 	 */
-	public function checkGoogleIdToken( $id_token ) {
+	public function check_google_idtoken( $id_token ) {
 		$guzzleClient 	= new \GuzzleHttp\Client(array( 'curl' => array( CURLOPT_SSL_VERIFYPEER => false, ), ));
 		$client_id 		= '1087260463503-80jh2sbb558fetnup7a09u91oevm4d8s.apps.googleusercontent.com';
 		$client 		= new \Google_Client( array( 'client_id' => $client_id ) );
