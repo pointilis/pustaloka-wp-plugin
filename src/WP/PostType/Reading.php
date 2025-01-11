@@ -15,6 +15,7 @@ class Reading {
         'from_page',
         'to_page',
         'screenshots',
+        'pause_log',
         'challenge', // related to `challenge` post type
 
         // this field not part of post meta
@@ -236,6 +237,21 @@ class Reading {
                 );
             }
 
+            // pause log
+            if ( $field == 'pause_log' ) {
+                $type               = 'array';
+                $single             = true;
+                $sanitize_callback  = null;
+                $show_in_rest       = array(
+                    'schema' => array(
+                        'type' => 'array',
+                        'items' => array(
+                            'type' => 'array',
+                        ),
+                    ),
+                );
+            }
+
             register_meta( 'post', $field,  array(
                 'type'              => $type,
                 'description'       => 'The ' . $field . ' of the reading',
@@ -320,6 +336,17 @@ class Reading {
                     'force_delete'     => false,
                     'mime_type'        => 'image/*',
                     'max_status'       => false,
+                ),
+                array(
+                    'id'               => 'pause_log',
+                    'name'             => __( 'Pause Log', 'pustaloka' ),
+                    'type'             => 'text_list',
+                    'clone'            => true,
+                    'options'          => array(
+                        'id'            => __( 'ID', 'pustaloka' ),
+                        'from_datetime' => __( 'From Datetime', 'pustaloka' ),
+                        'to_datetime'   => __( 'To Datetime', 'pustaloka' ),
+                    ),
                 )
             ),
         );
