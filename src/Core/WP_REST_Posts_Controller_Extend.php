@@ -84,7 +84,7 @@ class WP_REST_Posts_Controller_Extend extends \WP_REST_Posts_Controller {
 
         // featured image
         if ( rest_is_field_included( 'featured_media_url', $fields ) ) {
-            $featured_media_url = get_the_post_thumbnail_url( $book_id, 'large' );
+            $featured_media_url = get_the_post_thumbnail_url( $post->ID, 'large' );
             $default_image      = PUSTALOKA_URL . 'public/images/placeholder_book.png';
             $response->data['featured_media_url'] = $featured_media_url ? $featured_media_url : $default_image;
         }

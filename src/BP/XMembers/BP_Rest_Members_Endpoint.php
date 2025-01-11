@@ -72,6 +72,52 @@ class BP_REST_Members_Endpoint extends \BP_REST_Members_Endpoint {
 			)
 		);
 
+        // Register stats route.
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/(?P<id>[\d]+)/stats',
+			array(
+				array(
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'get_stats' ),
+					'permission_callback' => array( $this, 'get_stats_permissions_check' ),
+					'args'                => array(
+                        'id' => array(
+						    'description' => __( 'Unique identifier for the member.', 'buddypress' ),
+						    'type'        => 'integer',
+                            'required'    => true,
+					    ),
+                        'view' => array(
+						    'description' => __( 'Type of stats want to view.', 'buddypress' ),
+						    'type'        => 'string',
+                            'required'    => true,
+					    ),
+                        'from_date' => array(
+						    'description' => __( 'Filter by date.', 'buddypress' ),
+						    'type'        => 'string',
+                            'required'    => false,
+                            'validate_callback' => function( $value ) {
+                                $format = 'Y-m-d';
+                                $d      = \DateTime::createFromFormat($format, $value);
+                                return $d && strtolower( $d->format( $format ) ) === strtolower( $value );
+                            },
+					    ),
+                        'to_date' => array(
+						    'description' => __( 'Filter by date.', 'buddypress' ),
+						    'type'        => 'string',
+                            'required'    => false,
+                            'validate_callback' => function( $value ) {
+                                $format = 'Y-m-d';
+                                $d      = \DateTime::createFromFormat($format, $value);
+                                return $d && strtolower( $d->format( $format ) ) === strtolower( $value );
+                            },
+					    ),
+                    ),
+				),
+				'schema' => array( $this, 'get_item_schema' ),
+			)
+		);
+
         parent::register_routes();
     }
 
@@ -217,6 +263,401 @@ class BP_REST_Members_Endpoint extends \BP_REST_Members_Endpoint {
      */
     public function reset_password_permissions_check( $request ) {
         return true;
+    }
+
+    /**
+     * Get stats for user.
+     */
+    public function get_stats( $request ) {
+        global $wpdb;
+        
+        $user_id    = $request->get_param( 'id' );
+        $view       = $request->get_param( 'view' );
+        $retval     = array();
+
+        if ( $view === 'daily' || $view === 'pages_everyday' ) {
+            $retval = $this->get_daily_stats( $request, $user_id );
+        }
+
+        if ( $view === 'book' ) {
+            $retval = $this->get_book_stats( $request, $user_id );
+        }
+
+        if ( $view === 'general' ) {
+            $retval = $this->get_general_stats( $request, $user_id );
+        }
+        
+        return rest_ensure_response( $retval );
+    }
+
+    /**
+     * Get stats permissions check
+     */
+    public function get_stats_permissions_check( $request ) {
+        return true;
+    }
+
+    /**
+     * Get total pages read every day
+     */
+    public function get_daily_stats( $request, $user_id ) {
+        global $wpdb;
+        
+        $view               = $request->get_param( 'view' );
+        $from_date          = $request->get_param( 'from_date' );
+        $to_date            = $request->get_param( 'to_date' );
+        $page               = $request->get_param( 'page' );
+        $page               = $page ? $page : 1;
+        $per_page           = 30;
+        $offset             = ( $page * $per_page ) - $per_page;
+        $from_page_key      = 'from_page';
+        $to_page_key        = 'to_page';
+        $to_datetime_key    = 'to_datetime';
+        $from_datetime_key  = 'from_datetime';
+        $post_type          = 'reading';
+        $post_status        = 'publish';
+        $cache_key          = $view . '_' . $user_id;
+
+        $select_sql = "
+            SELECT      *,
+                        SUM(from_page)  AS total_from_page,
+                        SUM(to_page)    AS total_to_page,
+                        SUM(to_page) - SUM(from_page) AS total_reading_page,
+                        SUM(spending_time) AS spending_time
+
+            FROM        (
+                            SELECT      py.post_type,
+                                        py.post_author,
+                                        py.post_date,
+                                        py.post_status,
+                                
+                                        (
+                                            SELECT      IFNULL(pm.meta_value, 0)
+                                            FROM        {$wpdb->postmeta} AS pm
+                                            WHERE       pm.meta_key = '%s'
+                                            AND         pm.post_id = py.ID
+                                        ) AS from_page,
+
+                                        (
+                                            SELECT      IFNULL(pm.meta_value, 0)
+                                            FROM        {$wpdb->postmeta} AS pm
+                                            WHERE       pm.meta_key = '%s'
+                                            AND         pm.post_id = py.ID
+                                        ) AS to_page,
+
+                                        (
+                                            SELECT      IFNULL(pm.meta_value, 0)
+                                            FROM        {$wpdb->postmeta} AS pm
+                                            WHERE       pm.meta_key = '%s'
+                                            AND         pm.post_id = py.ID
+                                        ) AS to_datetime,
+
+                                        TIME_TO_SEC(
+                                            TIMEDIFF(
+                                                (
+                                                    SELECT      IFNULL(pm.meta_value, 0)
+                                                    FROM        {$wpdb->postmeta} AS pm
+                                                    WHERE       pm.meta_key = '%s'
+                                                    AND         pm.post_id = py.ID
+                                                ),
+                                                (
+                                                    SELECT      IFNULL(pm.meta_value, 0)
+                                                    FROM        {$wpdb->postmeta} AS pm
+                                                    WHERE       pm.meta_key = '%s'
+                                                    AND         pm.post_id = py.ID
+                                                )
+                                            )
+                                        ) AS spending_time
+
+                            FROM        {$wpdb->posts} AS py
+                        ) AS px
+        ";
+
+        $where_sql = "
+            WHERE       px.post_type    = '%s'
+            AND         px.post_status  = '%s'
+            AND         px.post_author  = %d
+        ";
+
+        // filter by range date
+        if ( $from_date && $to_date ) {
+            $where_sql .= "AND DATE(to_datetime) BETWEEN '%s' AND '%s'";
+        }
+
+        $results = wp_cache_get( $cache_key );
+
+        if ( $results === false) {
+            $results = $wpdb->get_results( $wpdb->prepare(
+                "
+                {$select_sql}
+                {$where_sql}
+                GROUP BY DATE(to_datetime)
+                LIMIT {$offset}, {$per_page}
+                ",
+                $from_page_key,
+                $to_page_key,
+                $to_datetime_key,
+                $to_datetime_key,
+                $from_datetime_key,
+                $post_type,
+                $post_status,
+                $user_id,
+                $from_date,
+                $to_date
+            ) );
+
+            wp_cache_set( $cache_key, $results );
+        }
+
+        return $results;
+    }
+
+    /**
+     * Get books count in date range
+     */
+    public function get_book_stats( $request, $user_id ) {
+        global $wpdb;
+
+        $view               = $request->get_param( 'view' );
+        $from_date          = $request->get_param( 'from_date' );
+        $to_date            = $request->get_param( 'to_date' );
+        $to_datetime_key    = 'to_datetime';
+        $status_key         = 'status';
+        $status_value       = 'done';
+        $post_type          = 'challenge';
+        $cache_key          = $view . '_' . $user_id;
+
+        $select_sql = "
+            SELECT      *,
+                        DATE_FORMAT(px.to_datetime,'%Y-%m') AS to_date,
+                        COUNT(px.to_datetime) AS total
+            FROM        (
+                            SELECT      py.post_type,
+                                        py.post_author,
+                                        py.post_status,
+                                
+                                        (
+                                            SELECT      IFNULL(pm.meta_value, 0)
+                                            FROM        {$wpdb->postmeta} AS pm
+                                            WHERE       pm.meta_key = '%s'
+                                            AND         pm.post_id = py.ID
+                                        ) AS to_datetime,
+
+                                        (
+                                            SELECT      pm.meta_value
+                                            FROM        {$wpdb->postmeta} AS pm
+                                            WHERE       pm.meta_key = '%s'
+                                            AND         pm.post_id = py.ID
+                                        ) AS status
+
+                            FROM        {$wpdb->posts} AS py
+                        ) AS px
+        ";
+
+        $where_sql = "
+            WHERE       px.post_type    = '%s'
+            AND         px.post_status IN ('publish', 'draft')
+            AND         px.post_author  = %d
+            AND         px.status = '%s' 
+        ";
+
+        // filter by range date
+        if ( $from_date && $to_date ) {
+            $where_sql .= "AND px.to_datetime BETWEEN '%s' AND '%s'";
+        }
+
+        $results = wp_cache_get( $cache_key );
+
+        if ( $results === false) {
+            $results = $wpdb->get_results( $wpdb->prepare(
+                "
+                {$select_sql}
+                {$where_sql}
+                GROUP BY to_date
+                ",
+                $to_datetime_key,
+                $status_key,
+                $post_type,
+                $user_id,
+                $status_value,
+                $from_date,
+                $to_date
+            ) );
+
+            wp_cache_set( $cache_key, $results );
+        }
+
+
+        return $results;
+    }
+
+    /**
+     * General stats
+     */
+    public function get_general_stats( $request, $user_id ) {
+        global $wpdb;
+
+        $from_date          = $request->get_param( 'from_date' );
+        $to_date            = $request->get_param( 'to_date' );
+        $from_page_key      = 'from_page';
+        $to_page_key        = 'to_page';
+        $to_datetime_key    = 'to_datetime';
+        $challenge_key      = 'challenge';
+        $from_datetime_key  = 'from_datetime';
+        $status_key         = 'status';
+        $status_done_key    = 'done';
+        $status_ongoing_key = 'ongoing';
+        $post_type          = 'challenge';
+        $post_status        = 'publish';
+
+        $select_sql = "
+            SELECT      SUM(to_page) - SUM(from_page) AS total_page,
+                        SUM(spending_time) AS spending_time,
+                        COUNT(DISTINCT(pr.ID)) AS total_session,
+
+                        (
+                            SELECT      COUNT(DISTINCT(p.ID))
+                            FROM        {$wpdb->posts} AS p
+                            LEFT JOIN   {$wpdb->postmeta} AS pm ON pm.post_id = p.ID
+                            WHERE       p.post_type = '%s'
+                            AND         p.post_status = '%s'
+                            AND         p.post_author = %d
+                            AND         pm.meta_key = '%s' AND pm.meta_value = '%s'
+                        ) AS challenge_done,
+
+                        (
+                            SELECT      COUNT(DISTINCT(p.ID))
+                            FROM        {$wpdb->posts} AS p
+                            LEFT JOIN   {$wpdb->postmeta} AS pm ON pm.post_id = p.ID
+                            WHERE       p.post_type = '%s'
+                            AND         p.post_status = '%s'
+                            AND         p.post_author = %d
+                            AND         pm.meta_key = '%s' AND pm.meta_value = '%s'
+                        ) AS challenge_ongoing
+
+            FROM        (
+                            SELECT      p.ID,
+                                        p.post_type,
+                                        p.post_author,
+                                        p.post_status,
+                                
+                                        (
+                                            SELECT      IFNULL(pm.meta_value, 0)
+                                            FROM        {$wpdb->postmeta} AS pm
+                                            WHERE       pm.meta_key = '%s'
+                                            AND         pm.post_id = p.ID
+                                        ) AS from_page,
+
+                                        (
+                                            SELECT      IFNULL(pm.meta_value, 0)
+                                            FROM        {$wpdb->postmeta} AS pm
+                                            WHERE       pm.meta_key = '%s'
+                                            AND         pm.post_id = p.ID
+                                        ) AS to_page,
+
+                                        (
+                                            SELECT      IFNULL(pm.meta_value, 0)
+                                            FROM        {$wpdb->postmeta} AS pm
+                                            WHERE       pm.meta_key = '%s'
+                                            AND         pm.post_id = p.ID
+                                        ) AS challenge,
+
+                                        (
+                                            SELECT      IFNULL(pm.meta_value, 0)
+                                            FROM        {$wpdb->postmeta} AS pm
+                                            WHERE       pm.meta_key = '%s'
+                                            AND         pm.post_id = p.ID
+                                        ) AS to_datetime,
+
+                                        TIME_TO_SEC(
+                                            TIMEDIFF(
+                                                (
+                                                    SELECT      IFNULL(pm.meta_value, 0)
+                                                    FROM        {$wpdb->postmeta} AS pm
+                                                    WHERE       pm.meta_key = '%s'
+                                                    AND         pm.post_id = p.ID
+                                                ),
+                                                (
+                                                    SELECT      IFNULL(pm.meta_value, 0)
+                                                    FROM        {$wpdb->postmeta} AS pm
+                                                    WHERE       pm.meta_key = '%s'
+                                                    AND         pm.post_id = p.ID
+                                                )
+                                            )
+                                        ) AS spending_time
+
+                            FROM        {$wpdb->posts} AS p
+                        ) AS pr
+
+            LEFT JOIN   (
+                            SELECT      p.ID,
+                                        p.post_author,
+                                        p.post_type,
+
+                                        (
+                                            SELECT      pm.meta_value
+                                            FROM        {$wpdb->postmeta} AS pm
+                                            WHERE       pm.meta_key = '%s'
+                                            AND         pm.post_id = p.ID
+                                        ) AS status
+                    
+                            FROM        {$wpdb->posts} AS p
+                        ) AS pc ON pc.ID = pr.challenge
+        ";
+
+        $where_sql = "
+            WHERE       pc.post_author = %d
+            AND         pc.post_type = '%s'
+            AND         pc.status IN ('ongoing', 'done')
+        ";
+
+        // filter by range date
+        if ( $from_date && $to_date ) {
+           $where_sql .= "AND DATE(to_datetime) BETWEEN '%s' AND '%s'";
+        }
+
+        $result = $wpdb->get_row( $wpdb->prepare(
+            "
+            {$select_sql}
+            {$where_sql}
+            GROUP BY pc.post_author
+            ",
+            // challenge done
+            $post_type,
+            $post_status,
+            $user_id,
+            $status_key,
+            $status_done_key,
+
+            // challenge ongoing
+            $post_type,
+            $post_status,
+            $user_id,
+            $status_key,
+            $status_ongoing_key,
+            
+            $from_page_key,
+            $to_page_key,
+            $challenge_key,
+            $to_datetime_key,
+            $to_datetime_key, // for time spend
+            $from_datetime_key, // for time spend
+            $status_key,
+
+            $user_id,
+            $post_type,
+
+            $from_date,
+            $to_date
+        ) );
+
+        return array(
+            'total_page'        => $result ? (float) $result->total_page : 0,
+            'total_session'     => $result ? (float) $result->total_session : 0,
+            'spending_time'     => $result ? (float) round( $result->spending_time ) : 0,
+            'challenge_done'    => $result ? (float) $result->challenge_done : 0,
+            'challenge_ongoing' => $result ? (float) $result->challenge_ongoing : 0,
+        );
     }
 
 }
