@@ -325,8 +325,8 @@ class BP_REST_Members_Endpoint extends \BP_REST_Members_Endpoint {
                         SUM(to_page)    AS total_to_page,
                         SUM(to_page) - SUM(from_page) AS total_reading_page,
                         SUM(spending_time) AS spending_time,
-                        SUM(pause_duration) AS pause_duration,
-                        SUM(spending_time) - SUM(pause_duration) AS effective_duration
+                        IFNULL(SUM(pause_duration), 0) AS pause_duration,
+                        IFNULL(SUM(spending_time) - SUM(pause_duration), SUM(spending_time)) AS effective_duration
 
             FROM        (
                             SELECT      py.post_type,
@@ -525,7 +525,7 @@ class BP_REST_Members_Endpoint extends \BP_REST_Members_Endpoint {
         $select_sql = "
             SELECT      SUM(to_page) - SUM(from_page) AS total_page,
                         SUM(spending_time) AS spending_time,
-                        SUM(pause_duration) AS pause_duration,
+                        IFNULL(SUM(pause_duration), 0) AS pause_duration,
                         COUNT(DISTINCT(pr.ID)) AS total_session,
 
                         (
