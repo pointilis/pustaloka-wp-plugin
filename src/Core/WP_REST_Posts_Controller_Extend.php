@@ -200,9 +200,9 @@ class WP_REST_Posts_Controller_Extend extends \WP_REST_Posts_Controller {
      * After inserted
      */
     public function after_insert( $post, $request, $is_new ) {
-        if ( ! $is_new && $this->post_type === 'reading' ) {
+        if ( $this->post_type === 'reading' ) {
             if ( $meta = $request->get_param( 'meta' ) ) {
-                if ( isset( $meta['to_page' ] ) ) {
+                if ( ! $is_new && isset( $meta['to_page' ] ) ) {
                     // mark as done if to_page >= book number_of_pages
                     $challenge_id = rwmb_get_value( 'challenge', array(), $post->ID );
                     $book_id = rwmb_get_value( 'book', array(), $challenge_id );
@@ -211,6 +211,35 @@ class WP_REST_Posts_Controller_Extend extends \WP_REST_Posts_Controller {
                     if ( (int) $meta['to_page'] >= $number_of_pages ) {
                         rwmb_set_meta( $challenge_id, 'status', 'done' );
                     }
+                }
+
+                // save duration
+                $pause_log = isset( $meta['pause_log'] ) ? $meta['pause_log'] : rwmb_get_value( 'pause_log', array(), $post->ID );
+                
+                if ( $pause_log ) {
+                    $pause_durations    = array();
+                    $total_pause_duration = 0;
+
+                    foreach ( $pause_log as $pause ) {
+                        $from_datetime = $pause[1];
+                        $to_datetime = $pause[2];
+
+                        if ( ! empty( $from_datetime ) && ! empty( $to_datetime ) ) {
+                            $ts_from    = strtotime( $from_datetime );
+                            $ts_to      = strtotime( $to_datetime );
+                            $diff       = (int) abs( $ts_to - $ts_from );
+                        } else {
+                            $diff       = 0;
+                        }
+
+                        $pause_durations[] = $diff;
+                    }
+
+                    if ( ! empty( $pause_durations ) ) {
+                        $total_pause_duration = array_sum( $pause_durations );
+                    }
+
+                    rwmb_set_meta( $post->ID, 'pause_duration', $total_pause_duration );
                 }
             }
         }

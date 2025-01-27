@@ -257,8 +257,25 @@ class BP_Filters {
             }
 
             // reading data
-            $reading_content = get_post_field( 'post_content', $secondary_item_id );
-            $pause_log       = rwmb_get_value( 'pause_log', array(), $secondary_item_id );
+            $reading_content    = get_post_field( 'post_content', $secondary_item_id );
+            $pause_log          = rwmb_get_value( 'pause_log', array(), $secondary_item_id );
+            $pause_durations    = array();
+
+            foreach ( $pause_log as $pause ) {
+                $from_datetime = $pause[1];
+                $to_datetime = $pause[2];
+
+                if ( ! empty( $from_datetime ) && ! empty( $to_datetime ) ) {
+                    $ts_from    = strtotime( $from_datetime );
+                    $ts_to      = strtotime( $to_datetime );
+                    $diff       = (int) abs( $ts_to - $ts_from );
+                } else {
+                    $diff       = 0;
+                }
+
+                $pause_durations[] = $diff;
+            }
+
             $reading = array(
                 'ID'                => $secondary_item_id,
                 'from_datetime'     => rwmb_get_value( 'from_datetime', array(), $secondary_item_id ),
@@ -268,6 +285,7 @@ class BP_Filters {
                 'number_of_pages'   => $number_of_pages,
                 'progress'          => round( $progress, 1 ),
                 'pause_log'         => $pause_log,
+                'pause_durations'   => $pause_durations,
                 'content'           => array(
                     'rendered'      => $reading_content,
                     'plain_text'    => wp_strip_all_tags( $reading_content ),

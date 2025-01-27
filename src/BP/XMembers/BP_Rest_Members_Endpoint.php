@@ -504,6 +504,7 @@ class BP_REST_Members_Endpoint extends \BP_REST_Members_Endpoint {
         $to_datetime_key    = 'to_datetime';
         $challenge_key      = 'challenge';
         $from_datetime_key  = 'from_datetime';
+        $pause_duration_key = 'pause_duration';
         $status_key         = 'status';
         $status_done_key    = 'done';
         $status_ongoing_key = 'ongoing';
@@ -513,6 +514,7 @@ class BP_REST_Members_Endpoint extends \BP_REST_Members_Endpoint {
         $select_sql = "
             SELECT      SUM(to_page) - SUM(from_page) AS total_page,
                         SUM(spending_time) AS spending_time,
+                        SUM(pause_duration) AS pause_duration,
                         COUNT(DISTINCT(pr.ID)) AS total_session,
 
                         (
@@ -584,7 +586,14 @@ class BP_REST_Members_Endpoint extends \BP_REST_Members_Endpoint {
                                                     AND         pm.post_id = p.ID
                                                 )
                                             )
-                                        ) AS spending_time
+                                        ) AS spending_time,
+
+                                        (
+                                            SELECT      IFNULL(pm.meta_value, 0)
+                                            FROM        {$wpdb->postmeta} AS pm
+                                            WHERE       pm.meta_key = '%s'
+                                            AND         pm.post_id = p.ID
+                                        ) AS pause_duration
 
                             FROM        {$wpdb->posts} AS p
                         ) AS pr
@@ -642,6 +651,7 @@ class BP_REST_Members_Endpoint extends \BP_REST_Members_Endpoint {
             $to_datetime_key,
             $to_datetime_key, // for time spend
             $from_datetime_key, // for time spend
+            $pause_duration_key, // pause duration
             $status_key,
 
             $user_id,
@@ -652,9 +662,11 @@ class BP_REST_Members_Endpoint extends \BP_REST_Members_Endpoint {
         ) );
 
         return array(
+            'user_id'           => $user_id,
             'total_page'        => $result ? (float) $result->total_page : 0,
             'total_session'     => $result ? (float) $result->total_session : 0,
             'spending_time'     => $result ? (float) round( $result->spending_time ) : 0,
+            'pause_duration'    => $result ? (float) round( $result->pause_duration ) : 0,
             'challenge_done'    => $result ? (float) $result->challenge_done : 0,
             'challenge_ongoing' => $result ? (float) $result->challenge_ongoing : 0,
         );

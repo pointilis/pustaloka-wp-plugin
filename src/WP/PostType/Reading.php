@@ -16,6 +16,7 @@ class Reading {
         'to_page',
         'screenshots',
         'pause_log',
+        'pause_duration',
         'challenge', // related to `challenge` post type
 
         // this field not part of post meta
@@ -252,6 +253,11 @@ class Reading {
                 );
             }
 
+            // pause duration
+            if ( $field == 'pause_duration' ) {
+                $type = 'integer';
+            }
+
             register_meta( 'post', $field,  array(
                 'type'              => $type,
                 'description'       => 'The ' . $field . ' of the reading',
@@ -347,7 +353,12 @@ class Reading {
                         'from_datetime' => __( 'From Datetime', 'pustaloka' ),
                         'to_datetime'   => __( 'To Datetime', 'pustaloka' ),
                     ),
-                )
+                ),
+                array(
+                    'id'   => 'pause_duration',
+                    'name' => __( 'Pause Duration', 'pustaloka' ),
+                    'type' => 'number',
+                ),
             ),
         );
 
