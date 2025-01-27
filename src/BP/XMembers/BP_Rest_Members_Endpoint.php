@@ -314,6 +314,7 @@ class BP_REST_Members_Endpoint extends \BP_REST_Members_Endpoint {
         $to_page_key        = 'to_page';
         $to_datetime_key    = 'to_datetime';
         $from_datetime_key  = 'from_datetime';
+        $pause_duration_key = 'pause_duration';
         $post_type          = 'reading';
         $post_status        = 'publish';
         $cache_key          = $view . '_' . $user_id;
@@ -323,7 +324,9 @@ class BP_REST_Members_Endpoint extends \BP_REST_Members_Endpoint {
                         SUM(from_page)  AS total_from_page,
                         SUM(to_page)    AS total_to_page,
                         SUM(to_page) - SUM(from_page) AS total_reading_page,
-                        SUM(spending_time) AS spending_time
+                        SUM(spending_time) AS spending_time,
+                        SUM(pause_duration) AS pause_duration,
+                        SUM(spending_time) - SUM(pause_duration) AS effective_duration
 
             FROM        (
                             SELECT      py.post_type,
@@ -367,7 +370,14 @@ class BP_REST_Members_Endpoint extends \BP_REST_Members_Endpoint {
                                                     AND         pm.post_id = py.ID
                                                 )
                                             )
-                                        ) AS spending_time
+                                        ) AS spending_time,
+
+                                        (
+                                            SELECT      IFNULL(pm.meta_value, 0)
+                                            FROM        {$wpdb->postmeta} AS pm
+                                            WHERE       pm.meta_key = '%s'
+                                            AND         pm.post_id = py.ID
+                                        ) AS pause_duration
 
                             FROM        {$wpdb->posts} AS py
                         ) AS px
@@ -399,6 +409,7 @@ class BP_REST_Members_Endpoint extends \BP_REST_Members_Endpoint {
                 $to_datetime_key,
                 $to_datetime_key,
                 $from_datetime_key,
+                $pause_duration_key,
                 $post_type,
                 $post_status,
                 $user_id,

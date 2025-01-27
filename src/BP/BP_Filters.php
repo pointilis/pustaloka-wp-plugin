@@ -260,20 +260,22 @@ class BP_Filters {
             $reading_content    = get_post_field( 'post_content', $secondary_item_id );
             $pause_log          = rwmb_get_value( 'pause_log', array(), $secondary_item_id );
             $pause_durations    = array();
+            
+            if ( ! empty( $pause_log ) ) {
+                foreach ( $pause_log as $pause ) {
+                    $from_datetime = $pause[1];
+                    $to_datetime = $pause[2];
 
-            foreach ( $pause_log as $pause ) {
-                $from_datetime = $pause[1];
-                $to_datetime = $pause[2];
+                    if ( ! empty( $from_datetime ) && ! empty( $to_datetime ) ) {
+                        $ts_from    = strtotime( $from_datetime );
+                        $ts_to      = strtotime( $to_datetime );
+                        $diff       = (int) abs( $ts_to - $ts_from );
+                    } else {
+                        $diff       = 0;
+                    }
 
-                if ( ! empty( $from_datetime ) && ! empty( $to_datetime ) ) {
-                    $ts_from    = strtotime( $from_datetime );
-                    $ts_to      = strtotime( $to_datetime );
-                    $diff       = (int) abs( $ts_to - $ts_from );
-                } else {
-                    $diff       = 0;
+                    $pause_durations[] = $diff;
                 }
-
-                $pause_durations[] = $diff;
             }
 
             $reading = array(
@@ -286,6 +288,7 @@ class BP_Filters {
                 'progress'          => round( $progress, 1 ),
                 'pause_log'         => $pause_log,
                 'pause_durations'   => $pause_durations,
+                'pause_duration'    => array_sum( $pause_durations ),
                 'content'           => array(
                     'rendered'      => $reading_content,
                     'plain_text'    => wp_strip_all_tags( $reading_content ),
