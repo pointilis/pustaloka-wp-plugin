@@ -16,6 +16,7 @@ use Pointilis\Pustaloka\WP\PostType\Challenge;
 use Pointilis\Pustaloka\WP\PostType\Reading;
 use Pointilis\Pustaloka\WP\PostType\Taxonomy;
 use Pointilis\Pustaloka\WP\PostType\Attachment;
+use Pointilis\Pustaloka\WP\PostType\Review;
 use Pointilis\Pustaloka\WP\User\User;
 use Pointilis\Pustaloka\WP\User\Register_Meta;
 use Pointilis\Pustaloka\Core\Filters;
@@ -42,6 +43,7 @@ add_action( 'plugins_loaded', function() {
     new Challenge();
     new Book();
     new Reading();
+    new Review();
     // new Library();
     // new Attachment();
     

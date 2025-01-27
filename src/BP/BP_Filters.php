@@ -211,6 +211,7 @@ class BP_Filters {
      */
     public function bp_rest_activity_prepare_value_extend( $response, $request, $activity ) {
         $secondary_item_id = $activity->secondary_item_id;
+        $type = $activity->type;
 
         // set user data
         if ( $activity->user_id ) {
@@ -257,6 +258,7 @@ class BP_Filters {
 
             // reading data
             $reading_content = get_post_field( 'post_content', $secondary_item_id );
+            $pause_log       = rwmb_get_value( 'pause_log', array(), $secondary_item_id );
             $reading = array(
                 'ID'                => $secondary_item_id,
                 'from_datetime'     => rwmb_get_value( 'from_datetime', array(), $secondary_item_id ),
@@ -265,6 +267,7 @@ class BP_Filters {
                 'to_page'           => $to_page,
                 'number_of_pages'   => $number_of_pages,
                 'progress'          => round( $progress, 1 ),
+                'pause_log'         => $pause_log,
                 'content'           => array(
                     'rendered'      => $reading_content,
                     'plain_text'    => wp_strip_all_tags( $reading_content ),
@@ -443,6 +446,13 @@ class BP_Filters {
         $response->data['is_initiator'] = $user_id === $initiator_user_id;
 
         return $response;
+    }
+
+    /**
+     * Get challenge
+     */
+    public function get_challenge() {
+
     }
 
 }
