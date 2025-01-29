@@ -322,6 +322,9 @@ class BP_Filters {
         // show plain content
         $response->data['content']['plain_text'] = wp_strip_all_tags( $activity->content );
 
+        // show favorited count
+        $response->data['favorited_count'] = bp_activity_get_meta( $activity->id, 'favorite_count', true );
+
         return $response;
     }
 
